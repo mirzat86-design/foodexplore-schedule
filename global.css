@@ -1,0 +1,25 @@
+/* 防止 iOS Safari 聚焦输入时自动放大：确保输入元素字体 >=16px */
+input, textarea, select {
+  font-size: 16px !important;
+}
+
+/* iOS 文本自动放大/缩小的系统行为统一为 100% */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 页面占满高度，减少软键盘弹出高度跳动感 */
+html, body, #root, #app-root {
+  height: 100%;
+}
+
+/* 轻微优化滚动 */
+body {
+  overscroll-behavior: contain;
+}
+
+/* React Native Web 的 TextInput 在 iOS 上有时是 textarea，额外兜底 */
+textarea, input[type="text"], input[type="password"], input[type="search"], input[type="tel"], input[type="number"] {
+  font-size: 16px !important;
+  line-height: 1.2;
+}

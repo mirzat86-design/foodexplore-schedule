@@ -132,8 +132,15 @@ const styles = StyleSheet.create({
 
   addBox: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   input: {
-    flex: 1, height: 44, borderWidth: 1, borderColor: '#e5e7eb',
-    borderRadius: 10, paddingHorizontal: 12, backgroundColor: '#fff',
+    flex: 1,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    fontSize: 18,
+    lineHeight: 22,
   },
   addBtn: {
     height: 44, paddingHorizontal: 16, backgroundColor: '#173B88',
@@ -142,8 +149,15 @@ const styles = StyleSheet.create({
   addTxt: { color: '#fff', fontWeight: '700' },
 
   search: {
-    height: 44, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
-    paddingHorizontal: 12, backgroundColor: '#fff', marginBottom: 10,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    marginBottom: 10,
+    fontSize: 18,
+    lineHeight: 22,
   },
 
   sectionTitle: { fontWeight: '700', color: '#111827', marginBottom: 6 },

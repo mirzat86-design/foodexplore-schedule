@@ -41,7 +41,7 @@ export default function AdminLoginScreen({ navigation }: { navigation: StackNavi
 const styles = StyleSheet.create({
   wrap: { flex: 1, padding: 16, backgroundColor: '#fff', justifyContent: 'center' },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
-  input: { borderWidth: 1, borderColor: '#ddd', height: 48, borderRadius: 8, paddingHorizontal: 12 },
+  input: { borderWidth: 1, borderColor: '#ddd', height: 48, borderRadius: 8, paddingHorizontal: 12, fontSize: 16 },
   btn: { backgroundColor: '#FF6A00', height: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   btnText: { color: '#fff', fontWeight: '700' },
 });

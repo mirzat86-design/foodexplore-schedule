@@ -44,8 +44,15 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#fff', padding: 20, paddingTop: 100 },
   title: { fontSize: 24, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
   input: {
-    height: 48, borderWidth: 1, borderColor: '#ddd', borderRadius: 10,
-    paddingHorizontal: 12, backgroundColor: '#fff', marginBottom: 16,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    marginBottom: 16,
+    fontSize: 18,
+    lineHeight: 22,
   },
   btn: {
     height: 48, backgroundColor: '#173B88', borderRadius: 12,

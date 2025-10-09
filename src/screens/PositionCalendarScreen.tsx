@@ -72,6 +72,15 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: '#173B88', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginRight: 8, marginBottom: 8 },
   chipTxt: { color: '#fff' },
   row: { flexDirection: 'row', marginTop: 12 },
-  input: { flex: 1, height: 44, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10 },
+  input: {
+    flex: 1,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 18,
+    lineHeight: 22,
+  },
   add: { marginLeft: 8, backgroundColor: '#FF6A00', paddingHorizontal: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 });

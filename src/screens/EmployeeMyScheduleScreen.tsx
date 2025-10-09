@@ -211,6 +211,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 8,
+    fontSize: 18,
+    lineHeight: 22,
   },
   calendar: { marginTop: 12 },
 
