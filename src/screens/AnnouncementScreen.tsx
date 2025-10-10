@@ -1,199 +1,163 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
-import { useSchedule } from '../context/ScheduleContext';
-import type { Announcement, AnnouncementLevel } from '../context/ScheduleContext';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Alert, FlatList, StyleSheet, ViewStyle } from 'react-native';
+import { supabase } from '../lib/supabase';
 
-const levelBg: Record<AnnouncementLevel, string> = {
-  red: '#FDE7E9',
-  orange: '#FFF4E5',
-  green: '#E8F5E9',
-  blue: '#E8F0FE',
-};
-const levelLabel: Record<AnnouncementLevel, string> = {
-  red: '重要',
-  orange: '提示',
-  green: '信息',
-  blue: '普通',
-};
-const levelDotColor: Record<AnnouncementLevel, string> = {
-  red: '#E53935',
-  orange: '#FB8C00',
-  green: '#43A047',
-  blue: '#1E88E5',
+type Announcement = {
+  id: string;
+  text: string | null;
+  level: string | null;    // 'red' | 'orange' | 'green' | 'blue'
+  type: string | null;     // 'announcement' | 'info'
+  published: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export default function AnnouncementScreen() {
-  const { announcements, addAnnouncement, updateAnnouncement, toggleAnnouncementPublish, removeAnnouncement } = useSchedule();
-
   const [text, setText] = useState('');
-  const [level, setLevel] = useState<AnnouncementLevel>('blue');
-  const [type, setType] = useState<'info' | 'announcement'>('info');
+  const [level, setLevel] = useState<'red' | 'orange' | 'green' | 'blue'>('green');
+  const [type, setType] = useState<'announcement' | 'info'>('announcement');
+  const [list, setList] = useState<Announcement[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  const onAdd = () => {
-    if (!text.trim()) return;
-    addAnnouncement({
+  const load = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) Alert.alert('读取失败', error.message);
+    else setList((data ?? []) as Announcement[]);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const channel = supabase
+      .channel('announcements-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'announcements' },
+        () => load()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [load]);
+
+// helper for active dot style (cannot put functions inside StyleSheet.create)
+const dotActiveStyle = (lv: 'red' | 'orange' | 'green' | 'blue'): ViewStyle => ({
+  backgroundColor: lv === 'red' ? '#ef4444' : lv === 'orange' ? '#f59e0b' : lv === 'green' ? '#10b981' : '#3b82f6',
+  borderColor: 'transparent',
+});
+
+  const insert = async (pub: boolean) => {
+    if (!text.trim()) {
+      Alert.alert('提示', '请填写内容');
+      return;
+    }
+    setSaving(true);
+    const payload = {
       text: text.trim(),
+      level,
       type,
-      level: type === 'announcement' ? level : 'green',
-      published: false,
-    });
-    setText('');
-    setLevel('blue');
-    setType('info');
+      published: pub,
+    };
+    const { error } = await supabase.from('announcements').insert(payload);
+    setSaving(false);
+    if (error) Alert.alert('提交失败', error.message);
+    else setText('');
   };
 
   const renderItem = ({ item }: { item: Announcement }) => (
-    <View style={[styles.card, { backgroundColor: levelBg[item.level] }]}> 
-      <Text style={styles.badge}>{levelLabel[item.level]} {item.published ? '' : '（未上架）'}</Text>
-      <TextInput
-        style={styles.msg}
-        value={item.text}
-        onChangeText={(v) => updateAnnouncement(item.id, { text: v })}
-        multiline
-      />
-      <View style={styles.row}>
-        <View style={styles.levelRow}>
-          {(['red','orange','green','blue'] as AnnouncementLevel[]).map((l) => (
-            <TouchableOpacity
-              key={l}
-              style={[
-                styles.levelDot,
-                {
-                  borderColor: item.level === l ? '#173B88' : '#999',
-                  backgroundColor: levelDotColor[l],
-                  opacity: item.level === l ? 1 : 0.3,
-                },
-              ]}
-              onPress={() => updateAnnouncement(item.id, { level: l })}
-            />
-          ))}
-        </View>
-
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity style={[styles.btn, item.published ? styles.gray : styles.primary]} onPress={() => toggleAnnouncementPublish(item.id, !item.published)}>
-            <Text style={styles.btnText}>{item.published ? '下架' : '上架'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, styles.danger]} onPress={() => removeAnnouncement(item.id)}>
-            <Text style={styles.btnText}>删除</Text>
-          </TouchableOpacity>
-        </View>
+    <View style={styles.card}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+        <Text style={styles.cardTitle}>
+          {item.type === 'info' ? '信息' : '公告'} · {item.level ?? 'green'}
+        </Text>
+        <Text style={[styles.badge, item.published ? styles.published : styles.draft]}>
+          {item.published ? '已发布' : '草稿'}
+        </Text>
       </View>
+      <Text style={styles.cardText}>{item.text}</Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* 新建 */}
-      <View style={styles.newBox}>
-        <Text style={styles.title}>新增公告或信息</Text>
+      <Text style={styles.title}>新增公告或信息</Text>
 
-        {/* 类型选择 */}
-        <View style={styles.row}>
-          <Text style={styles.label}>类型：</Text>
-          {(['info', 'announcement'] as const).map((t) => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.typeBtn, type === t && styles.typeBtnActive]}
-              onPress={() => setType(t)}
-            >
-              <Text style={[styles.typeText, type === t && styles.typeTextActive]}>
-                {t === 'info' ? '信息' : '公告'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* 仅当公告类型时显示等级 */}
-        {type === 'announcement' && (
-          <View style={styles.levelRow}>
-            {(['red', 'orange', 'blue'] as AnnouncementLevel[]).map((l) => (
-              <TouchableOpacity
-                key={l}
-                style={[
-                  styles.levelDot,
-                  {
-                    borderColor: level === l ? '#173B88' : '#999',
-                    backgroundColor: levelDotColor[l],
-                    opacity: level === l ? 1 : 0.3,
-                  },
-                ]}
-                onPress={() => setLevel(l)}
-              />
-            ))}
-          </View>
-        )}
-
-        <TextInput
-          placeholder={type === 'announcement' ? '输入公告内容' : '输入信息内容'}
-          value={text}
-          onChangeText={setText}
-          style={styles.input}
-          multiline
-        />
-
-        {/* 操作按钮 */}
-        <View style={styles.row}>
-          <TouchableOpacity style={[styles.btn, styles.gray]} onPress={onAdd}>
-            <Text style={styles.btnText}>保存草稿</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, styles.primary]} onPress={onAdd}>
-            <Text style={styles.btnText}>发布</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.row}>
+        <TouchableOpacity style={[styles.tag, type === 'info' && styles.tagActive]} onPress={() => setType('info')}>
+          <Text style={[styles.tagText, type === 'info' && styles.tagTextActive]}>信息</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tag, type === 'announcement' && styles.tagActive]} onPress={() => setType('announcement')}>
+          <Text style={[styles.tagText, type === 'announcement' && styles.tagTextActive]}>公告</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 列表 */}
-      <FlatList<Announcement>
-        data={announcements}
+      <View style={styles.row}>
+        {(['red','orange','green','blue'] as const).map((lv) => (
+          <TouchableOpacity key={lv} style={[styles.dot, level === lv && dotActiveStyle(lv)]} onPress={() => setLevel(lv)} />
+        ))}
+      </View>
+
+      <TextInput
+        multiline
+        value={text}
+        onChangeText={setText}
+        placeholder="输入公告内容"
+        style={styles.input}
+        placeholderTextColor="#999"
+      />
+
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <TouchableOpacity onPress={() => insert(false)} style={[styles.btn, styles.gray]} disabled={saving}>
+          <Text style={styles.btnText}>{saving ? '保存中…' : '保存草稿'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => insert(true)} style={[styles.btn, styles.primary]} disabled={saving}>
+          <Text style={styles.btnText}>{saving ? '发布中…' : '发布'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={list}
         keyExtractor={(it) => it.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-  newBox: { marginBottom: 16, padding: 12, borderRadius: 12, backgroundColor: '#F3F6FF' },
-  title: { fontSize: 16, fontWeight: '700', color: '#173B88', marginBottom: 8 },
+  container: { flex: 1, backgroundColor: '#F5F7FB', padding: 16 },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: '#173B88' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  tag: { borderRadius: 999, borderWidth: 1, borderColor: '#d6d9e4', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff' },
+  tagActive: { backgroundColor: '#173B88', borderColor: '#173B88' },
+  tagText: { color: '#173B88', fontWeight: '600' },
+  tagTextActive: { color: '#fff' },
+  dot: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#e5e7eb', borderWidth: 2, borderColor: '#d1d5db' },
   input: {
-    minHeight: 60,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 8,
+    minHeight: 90,
     backgroundColor: '#fff',
-    marginTop: 8,
-    fontSize: 18,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16, // iOS Safari 防缩放
     lineHeight: 22,
+    borderWidth: 1,
+    borderColor: '#e6e8ef',
+    marginBottom: 12,
   },
-  btn: { height: 40, paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: '#fff', fontWeight: '700' },
+  btn: { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },
   primary: { backgroundColor: '#173B88' },
-  danger: { backgroundColor: '#E53935' },
-  gray: { backgroundColor: '#6B7280' },
-
-  card: { borderRadius: 12, padding: 12, marginBottom: 12 },
-  badge: { fontSize: 12, color: '#173B88', fontWeight: '700' },
-  msg: {
-    marginTop: 6,
-    fontSize: 18,
-    lineHeight: 22,
-    color: '#111',
-    padding: 6,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  row: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  levelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  levelDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
-
-  label: { fontSize: 14, fontWeight: '600', color: '#173B88' },
-  typeBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#ccc', marginRight: 8 },
-  typeBtnActive: { borderColor: '#173B88', backgroundColor: '#E8F0FE' },
-  typeText: { color: '#555', fontSize: 14 },
-  typeTextActive: { color: '#173B88', fontWeight: '700' },
+  gray: { backgroundColor: '#6b7280' },
+  btnText: { color: '#fff', fontWeight: '700' },
+  card: { backgroundColor: '#fff', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#eef0f5' },
+  cardTitle: { fontSize: 14, color: '#374151', fontWeight: '600' },
+  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, color: '#fff', fontSize: 12, overflow: 'hidden' },
+  published: { backgroundColor: '#059669' },
+  draft: { backgroundColor: '#9ca3af' },
+  cardText: { marginTop: 6, color: '#1f2937', fontSize: 16, lineHeight: 22 },
 });

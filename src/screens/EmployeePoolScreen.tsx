@@ -1,179 +1,152 @@
-import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  Switch,
-  Alert,
-  Keyboard,
-} from 'react-native';
-import { useSchedule } from '../context/ScheduleContext';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, ActivityIndicator } from 'react-native';
+import { supabase } from '../lib/supabase';
 
-type Row = {
+type Employee = {
   id: string;
   name: string;
   enabled: boolean;
+  created_at: string;
 };
 
 export default function EmployeePoolScreen() {
-  const { employees, addEmployee, toggleEmployeeEnabled, removeEmployee } = useSchedule();
+  const [list, setList] = useState<Employee[]>([]);
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [query, setQuery] = useState('');
-  const [newName, setNewName] = useState('');
+  const fetchEmployees = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .returns<Employee[]>();
+    if (error) {
+      Alert.alert('读取失败', error.message);
+    } else {
+      setList(data ?? []);
+    }
+    setLoading(false);
+  }, []);
 
-  const filtered: Row[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return employees;
-    return employees.filter(e => e.name.toLowerCase().includes(q));
-  }, [employees, query]);
+  useEffect(() => {
+    fetchEmployees();
 
-  const active = filtered.filter(e => e.enabled);
-  const inactive = filtered.filter(e => !e.enabled);
+    // Realtime 订阅
+    const channel = supabase
+      .channel('employees-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'employees' },
+        () => fetchEmployees()
+      )
+      .subscribe();
 
-  const onAdd = () => {
-    const nm = newName.trim().replace(/\s+/g, ' ');
-    if (!nm) return;
-    addEmployee(nm);
-    setNewName('');
-    Keyboard.dismiss();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchEmployees]);
+
+  const onAdd = async () => {
+    const value = name.trim();
+    if (!value) return;
+    setSaving(true);
+    const { error } = await supabase.from('employees').insert({ name: value, enabled: true });
+    setSaving(false);
+    if (error) {
+      Alert.alert('新增失败', error.message);
+    } else {
+      setName('');
+    }
   };
 
-  const onToggle = (id: string, next: boolean) => {
-    toggleEmployeeEnabled(id, next);
+  const toggleEnabled = async (emp: Employee) => {
+    const { error } = await supabase.from('employees').update({ enabled: !emp.enabled }).eq('id', emp.id);
+    if (error) Alert.alert('更新失败', error.message);
   };
 
-  const onDelete = (id: string, name: string) => {
-    Alert.alert('删除员工', `确定删除 ${name} 吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: () => removeEmployee(id) },
-    ]);
-  };
-
-  const renderRow = ({ item }: { item: Row }) => (
+  const renderItem = ({ item }: { item: Employee }) => (
     <View style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.name, !item.enabled && { color: '#9CA3AF', textDecorationLine: 'line-through' }]}>
-          {item.name}
-        </Text>
-        <Text style={[styles.badge, item.enabled ? styles.badgeOn : styles.badgeOff]}>
-          {item.enabled ? '启用' : '停用'}
-        </Text>
-      </View>
-
-      <View style={styles.rowRight}>
-        <Switch
-          value={item.enabled}
-          onValueChange={(v) => onToggle(item.id, v)}
-        />
-        <TouchableOpacity style={styles.delBtn} onPress={() => onDelete(item.id, item.name)}>
-          <Text style={styles.delTxt}>删除</Text>
+      <Text style={[styles.name, !item.enabled && styles.dim]}>{item.name}</Text>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <TouchableOpacity style={[styles.smallBtn, item.enabled ? styles.gray : styles.primary]} onPress={() => toggleEnabled(item)}>
+          <Text style={styles.smallBtnText}>{item.enabled ? '停用' : '启用'}</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.container}>
       <Text style={styles.title}>员工池</Text>
 
-      {/* 新增 */}
-      <View style={styles.addBox}>
+      <View style={styles.inputRow}>
         <TextInput
-          placeholder="输入姓名后添加（自动去重，停用重启亦可）"
-          value={newName}
-          onChangeText={setNewName}
+          value={name}
+          onChangeText={setName}
+          placeholder="输入员工姓名"
           style={styles.input}
-          autoCapitalize="words"
-          returnKeyType="done"
-          onSubmitEditing={onAdd}
+          placeholderTextColor="#999"
+          // 防 iOS Safari 放大
+          autoCapitalize="none"
+          autoCorrect={false}
         />
-        <TouchableOpacity style={styles.addBtn} onPress={onAdd}>
-          <Text style={styles.addTxt}>添加</Text>
+        <TouchableOpacity style={[styles.btn, saving && { opacity: 0.6 }]} onPress={onAdd} disabled={saving}>
+          <Text style={styles.btnText}>{saving ? '保存中…' : '添加'}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* 搜索 */}
-      <TextInput
-        placeholder="搜索员工（按姓名）"
-        value={query}
-        onChangeText={setQuery}
-        style={styles.search}
-        autoCapitalize="none"
-        returnKeyType="search"
-      />
-
-      {/* 启用区 */}
-      <Text style={styles.sectionTitle}>启用（{active.length}）</Text>
-      <FlatList
-        data={active}
-        keyExtractor={(it) => it.id}
-        renderItem={renderRow}
-        ListEmptyComponent={<Text style={styles.empty}>（无）</Text>}
-      />
-
-      {/* 停用区 */}
-      <Text style={[styles.sectionTitle, { marginTop: 16 }]}>停用（{inactive.length}）</Text>
-      <FlatList
-        data={inactive}
-        keyExtractor={(it) => it.id}
-        renderItem={renderRow}
-        ListEmptyComponent={<Text style={styles.empty}>（无）</Text>}
-      />
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 24 }} />
+      ) : (
+        <FlatList
+          data={list}
+          keyExtractor={(it) => it.id}
+          renderItem={renderItem}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          contentContainerStyle={{ paddingTop: 12 }}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 56 },
-  title: { fontSize: 20, fontWeight: '800', marginBottom: 8 },
-
-  addBox: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  container: { flex: 1, backgroundColor: '#F5F7FB', padding: 16 },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: '#173B88' },
+  inputRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   input: {
     flex: 1,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
     backgroundColor: '#fff',
-    fontSize: 18,
-    lineHeight: 22,
-  },
-  addBtn: {
-    height: 44, paddingHorizontal: 16, backgroundColor: '#173B88',
-    borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-  },
-  addTxt: { color: '#fff', fontWeight: '700' },
-
-  search: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    marginBottom: 10,
-    fontSize: 18,
-    lineHeight: 22,
+    paddingVertical: 10,
+    fontSize: 16, // iOS Safari 防缩放
+    borderWidth: 1,
+    borderColor: '#e6e8ef',
   },
-
-  sectionTitle: { fontWeight: '700', color: '#111827', marginBottom: 6 },
-
+  btn: {
+    backgroundColor: '#173B88',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  btnText: { color: '#fff', fontWeight: '600' },
   row: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#eef0f5',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  name: { fontSize: 16, color: '#111827' },
-  badge: { marginTop: 2, fontSize: 12, fontWeight: '700', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  badgeOn: { backgroundColor: '#E8F5E9', color: '#166534' },
-  badgeOff: { backgroundColor: '#FEE2E2', color: '#991B1B' },
-
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  delBtn: { backgroundColor: '#EF4444', paddingHorizontal: 10, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  delTxt: { color: '#fff', fontWeight: '700' },
-
-  empty: { color: '#6B7280', paddingVertical: 8 },
+  name: { fontSize: 16, color: '#1f2937' },
+  dim: { color: '#999' },
+  smallBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  smallBtnText: { color: '#fff', fontWeight: '600' },
+  primary: { backgroundColor: '#173B88' },
+  gray: { backgroundColor: '#6b7280' },
 });
