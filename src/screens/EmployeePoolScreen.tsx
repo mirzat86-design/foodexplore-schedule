@@ -66,12 +66,43 @@ export default function EmployeePoolScreen() {
     if (error) Alert.alert('更新失败', error.message);
   };
 
+  const confirmDelete = (emp: Employee) => {
+    Alert.alert('确认删除', `确定删除员工「${emp.name}」吗？此操作不可恢复。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('employees').delete().eq('id', emp.id);
+          if (error) {
+            Alert.alert('删除失败', error.message);
+          } else {
+            // 立即从本地列表移除，提升响应速度（Realtime 也会同步回来）
+            setList((prev) => prev.filter((it) => it.id !== emp.id));
+          }
+        },
+      },
+    ]);
+  };
+
   const renderItem = ({ item }: { item: Employee }) => (
     <View style={styles.row}>
       <Text style={[styles.name, !item.enabled && styles.dim]}>{item.name}</Text>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <TouchableOpacity style={[styles.smallBtn, item.enabled ? styles.gray : styles.primary]} onPress={() => toggleEnabled(item)}>
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+        <TouchableOpacity
+          style={[styles.smallBtn, item.enabled ? styles.gray : styles.primary]}
+          onPress={() => toggleEnabled(item)}
+        >
           <Text style={styles.smallBtnText}>{item.enabled ? '停用' : '启用'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => confirmDelete(item)}
+          style={styles.deleteBtn}
+          accessibilityRole="button"
+          accessibilityLabel={`删除 ${item.name}`}
+        >
+          <Text style={styles.deleteText}>删除</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -149,4 +180,13 @@ const styles = StyleSheet.create({
   smallBtnText: { color: '#fff', fontWeight: '600' },
   primary: { backgroundColor: '#173B88' },
   gray: { backgroundColor: '#6b7280' },
+  deleteBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    backgroundColor: '#fff',
+  },
+  deleteText: { color: '#ef4444', fontWeight: '700' },
 });

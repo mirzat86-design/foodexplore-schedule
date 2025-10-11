@@ -67,15 +67,44 @@ const dotActiveStyle = (lv: 'red' | 'orange' | 'green' | 'blue'): ViewStyle => (
     else setText('');
   };
 
+  const confirmDelete = (id: string) => {
+    Alert.alert('确认删除', '删除后将无法恢复，确定要删除吗？', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('announcements').delete().eq('id', id);
+          if (error) {
+            Alert.alert('删除失败', error.message);
+          } else {
+            // 立即更新本地列表以获得更快的反馈
+            setList((prev) => prev.filter((it) => it.id !== id));
+          }
+        },
+      },
+    ]);
+  };
+
   const renderItem = ({ item }: { item: Announcement }) => (
     <View style={styles.card}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <Text style={styles.cardTitle}>
           {item.type === 'info' ? '信息' : '公告'} · {item.level ?? 'green'}
         </Text>
-        <Text style={[styles.badge, item.published ? styles.published : styles.draft]}>
-          {item.published ? '已发布' : '草稿'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={[styles.badge, item.published ? styles.published : styles.draft]}>
+            {item.published ? '已发布' : '草稿'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => confirmDelete(item.id)}
+            style={styles.deleteBtn}
+            accessibilityRole="button"
+            accessibilityLabel="删除公告"
+          >
+            <Text style={styles.deleteText}>删除</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <Text style={styles.cardText}>{item.text}</Text>
     </View>
@@ -160,4 +189,6 @@ const styles = StyleSheet.create({
   published: { backgroundColor: '#059669' },
   draft: { backgroundColor: '#9ca3af' },
   cardText: { marginTop: 6, color: '#1f2937', fontSize: 16, lineHeight: 22 },
+  deleteBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#ef4444', backgroundColor: '#fff' },
+  deleteText: { color: '#ef4444', fontWeight: '700', fontSize: 12 },
 });
