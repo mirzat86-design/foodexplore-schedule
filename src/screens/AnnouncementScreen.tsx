@@ -136,6 +136,8 @@ const dotActiveStyle = (lv: 'red' | 'orange' | 'green' | 'blue'): ViewStyle => (
         placeholder="输入公告内容"
         style={styles.input}
         placeholderTextColor="#999"
+        nativeID="announcement-text"
+        autoComplete="off"
       />
 
       <View style={{ flexDirection: 'row', gap: 12 }}>

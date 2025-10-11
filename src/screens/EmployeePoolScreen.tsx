@@ -61,6 +61,26 @@ export default function EmployeePoolScreen() {
     }
   };
 
+  const toggleEnabled = async (emp: Employee) => {
+    // Flip enabled state in DB
+    const { data, error } = await supabase
+      .from('employees')
+      .update({ enabled: !emp.enabled })
+      .eq('id', emp.id)
+      .select()
+      .single();
+
+    if (error) {
+      Alert.alert('更新失败', error.message);
+      return;
+    }
+
+    // Optimistic update local list
+    setList((prev) =>
+      prev.map((it) => (it.id === emp.id ? { ...it, enabled: data?.enabled ?? !emp.enabled } : it))
+    );
+  };
+
   const confirmDelete = (emp: Employee) => {
     Alert.alert('确认删除', `确定删除员工「${emp.name}」吗？此操作不可恢复。`, [
       { text: '取消', style: 'cancel' },
@@ -117,6 +137,8 @@ export default function EmployeePoolScreen() {
           // 防 iOS Safari 放大
           autoCapitalize="none"
           autoCorrect={false}
+          nativeID="employee-name-input"
+          autoComplete="off"
         />
         <TouchableOpacity style={[styles.btn, saving && { opacity: 0.6 }]} onPress={onAdd} disabled={saving}>
           <Text style={styles.btnText}>{saving ? '保存中…' : '添加'}</Text>
