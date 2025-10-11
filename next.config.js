@@ -22,6 +22,12 @@ const CSP = [
 ].join('; ');
 
 const nextConfig = {
+  // 显式注入环境变量，确保在构建时打包进入客户端
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  },
+
   async headers() {
     return [
       {
