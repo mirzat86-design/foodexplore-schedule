@@ -61,11 +61,6 @@ export default function EmployeePoolScreen() {
     }
   };
 
-  const toggleEnabled = async (emp: Employee) => {
-    const { error } = await supabase.from('employees').update({ enabled: !emp.enabled }).eq('id', emp.id);
-    if (error) Alert.alert('更新失败', error.message);
-  };
-
   const confirmDelete = (emp: Employee) => {
     Alert.alert('确认删除', `确定删除员工「${emp.name}」吗？此操作不可恢复。`, [
       { text: '取消', style: 'cancel' },
@@ -110,7 +105,7 @@ export default function EmployeePoolScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>员工池</Text>
+      <Text style={styles.title}>员工池（可删除版）</Text>
 
       <View style={styles.inputRow}>
         <TextInput
