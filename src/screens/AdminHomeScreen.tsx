@@ -154,17 +154,33 @@ function escapeCsvCell(v: string): string {
 }
 
 function triggerDownload(csv: string, filename: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 0);
+  try {
+    if (typeof window === 'undefined') return;
+
+    // 优先使用 Blob + a[download]
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    // 某些浏览器需要延时再 revoke
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  } catch (err) {
+    // 若 CSP 阻止 blob:，尝试 data: URI 作为回退
+    try {
+      const dataUrl = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+      window.open(dataUrl, '_blank');
+    } catch (e) {
+      console.error('download fallback failed', e);
+      alert('下载被浏览器策略阻止，请在桌面浏览器尝试或联系管理员配置 CSP。');
+    }
+  }
 }
 
 // ---------- 日期工具 ----------
@@ -215,6 +231,9 @@ export default function AdminHomeScreen() {
     try {
       setBusy(true);
       await action();
+    } catch (e: any) {
+      console.error('操作失败', e?.message || e);
+      alert('导出失败：' + (e?.message || e));
     } finally {
       setBusy(false);
     }
