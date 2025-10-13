@@ -68,21 +68,43 @@ function normalizeRecord(r: RawAssignment) {
   };
 }
 
-async function fetchAssignments(startISO: string, endISO: string): Promise<Array<{ date: string; role: string; employee: string }>> {
-  // 最宽松的 select，尽量拿全字段；排序按日期
+async function fetchAssignments(
+  startISO: string,
+  endISO: string
+): Promise<Array<{ date: string; role: string; employee: string }>> {
+  // 统一把可能用到的列都选出来（不存在的列不会报错，只是返回 null）
+  const selectCols = [
+    'date', 'work_date', 'shift_date', 'workDate', 'shiftDate', 'work_day', 'workday',
+    'role', 'position', 'role_name', 'position_name', 'shift_role',
+    'employee_name', 'name', 'employee', 'staff_name'
+  ].join(',');
+
+  // 用 OR 组合在不同“日期列”上的范围过滤，哪个存在就会命中
+  const orRange = [
+    `and(date.gte.${startISO},date.lte.${endISO})`,
+    `and(work_date.gte.${startISO},work_date.lte.${endISO})`,
+    `and(shift_date.gte.${startISO},shift_date.lte.${endISO})`,
+    `and(workDate.gte.${startISO},workDate.lte.${endISO})`,
+    `and(shiftDate.gte.${startISO},shiftDate.lte.${endISO})`,
+    `and(work_day.gte.${startISO},work_day.lte.${endISO})`,
+    `and(workday.gte.${startISO},workday.lte.${endISO})`,
+  ].join(',');
+
   const { data, error } = await supabase
     .from('schedule_assignments')
-    .select('*')
-    .gte('date', startISO) // 如果你的真实字段是 work_date/shift_date，下面 normalizeRecord 会兜底
-    .lte('date', endISO)
-    .order('date', { ascending: true });
+    .select(selectCols)
+    .or(orRange);
 
   if (error) {
     console.error('[exportSchedule] supabase error:', error.message);
     throw new Error(error.message);
   }
 
-  return (data ?? []).map(normalizeRecord).filter(r => r.date && r.role);
+  // 归一化并按日期排序（在客户端排，不在数据库按可能不存在的列排）
+  return (data ?? [])
+    .map(normalizeRecord)
+    .filter(r => r.date && r.role)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ---------- 透视逻辑（日期 x 岗位） ----------
