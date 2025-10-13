@@ -17,8 +17,5 @@ export const positions: Position[] = [
   { id: 14, name: 'Desserts 甜点', key: 'desserts' },
   { id: 15, name: 'Schoonmaak 卫生', key: 'cleaning' },
   { id: 16, name: 'Overig 其他', key: 'other' },
-  { id: 17, name: 'Roasted Duck 烤鸭', key: 'roastedduck' },
-  { id: 18, name: 'Noodles 拉面', key: 'noodles' },
-  { id: 19, name: 'Kebab 土耳其烤肉', key: 'kebab' },
-  { id: 20, name: 'Soup 汤品', key: 'soup' },
+  { id: 17, name: 'Kebab 土耳其烤肉', key: 'kebab' },
 ];
