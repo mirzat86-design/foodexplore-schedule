@@ -83,9 +83,10 @@ export async function fetchRangeData(
 
   const { data: assigns, error: aErr } = await supabase
     .from('schedule_assignments')
-    .select('*')
+    .select('id, position_key, work_date, employee_name')
     .gte('work_date', from)
-    .lte('work_date', to);
+    .lte('work_date', to)
+    .order('work_date', { ascending: true });
   if (aErr) throw aErr;
 
   const { data: pos, error: pErr } = await supabase
@@ -121,9 +122,10 @@ export async function fetchWeekData(
   // 1) assignments
   const { data: assigns, error: aErr } = await supabase
     .from('schedule_assignments')
-    .select('*')
+    .select('id, position_key, work_date, employee_name')
     .gte('work_date', from)
-    .lte('work_date', to);
+    .lte('work_date', to)
+    .order('work_date', { ascending: true });
 
   if (aErr) throw aErr;
 

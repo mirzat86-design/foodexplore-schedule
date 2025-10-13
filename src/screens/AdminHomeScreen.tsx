@@ -79,21 +79,12 @@ async function fetchAssignments(
     'employee_name', 'name', 'employee', 'staff_name'
   ].join(',');
 
-  // 用 OR 组合在不同“日期列”上的范围过滤，哪个存在就会命中
-  const orRange = [
-    `and(date.gte.${startISO},date.lte.${endISO})`,
-    `and(work_date.gte.${startISO},work_date.lte.${endISO})`,
-    `and(shift_date.gte.${startISO},shift_date.lte.${endISO})`,
-    `and(workDate.gte.${startISO},workDate.lte.${endISO})`,
-    `and(shiftDate.gte.${startISO},shiftDate.lte.${endISO})`,
-    `and(work_day.gte.${startISO},work_day.lte.${endISO})`,
-    `and(workday.gte.${startISO},workday.lte.${endISO})`,
-  ].join(',');
-
+  // 仅使用实际存在的 work_date 字段做范围过滤，避免因不存在的 date 列报错
   const { data, error } = await supabase
     .from('schedule_assignments')
     .select(selectCols)
-    .or(orRange);
+    .gte('work_date', startISO)
+    .lte('work_date', endISO);
 
   if (error) {
     console.error('[exportSchedule] supabase error:', error.message);
