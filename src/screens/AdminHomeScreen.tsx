@@ -13,7 +13,7 @@
  *       - 员工：employee_name | name
  */
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { supabase } from '../lib/supabase';
@@ -209,6 +209,7 @@ export default function AdminHomeScreen() {
   })();
 
   const [busy, setBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   async function handle(action: () => Promise<void>) {
     try {
@@ -224,41 +225,7 @@ export default function AdminHomeScreen() {
       <Text style={styles.title}>管理员</Text>
       <Text style={styles.subtitle}>请选择要管理的模块 / 导出排班表</Text>
 
-      {/* 导出按钮区 */}
-      <View style={styles.group}>
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => handle(exportScheduleCsvForWeek)}
-          style={({ pressed }) => [styles.btn, styles.blue, pressed && styles.pressed]}
-        >
-          <Text style={styles.btnText}>{busy ? '导出中…' : '导出本周排班（CSV）'}</Text>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => handle(exportScheduleCsvForMonth)}
-          style={({ pressed }) => [styles.btn, styles.orange, pressed && styles.pressed]}
-        >
-          <Text style={styles.btnText}>{busy ? '导出中…' : '导出本月排班（CSV）'}</Text>
-        </Pressable>
-
-        {/* 占位：自定义日期范围可在后续加入日期选择器，这里先给一个导航/提示 */}
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => {
-            // 以后可以打开一个日期范围选择页；现在先提示
-            alert('自定义日期范围导出即将上线');
-          }}
-          style={({ pressed }) => [styles.btn, styles.green, pressed && styles.pressed]}
-        >
-          <Text style={styles.btnText}>自定义日期范围（即将可用）</Text>
-        </Pressable>
-      </View>
-
-      {/* 保留原有导航入口（若存在导航栈） */}
+      {/* 四个主入口按钮（经典布局）：排班表 / 公告 / 员工池 / 导出 */}
       <View style={styles.group}>
         <Pressable
           accessibilityRole="button"
@@ -283,7 +250,65 @@ export default function AdminHomeScreen() {
         >
           <Text style={styles.btnText}>员工池（增删员工）</Text>
         </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => setExportOpen(true)}
+          style={({ pressed }) => [styles.btn, styles.green, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>排班导出</Text>
+        </Pressable>
       </View>
+
+      {/* 导出选项 Modal */}
+      <Modal
+        transparent
+        visible={exportOpen}
+        animationType="fade"
+        onRequestClose={() => setExportOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>选择导出范围</Text>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={async () => { setExportOpen(false); await handle(exportScheduleCsvForWeek); }}
+              style={({ pressed }) => [styles.option, pressed && styles.pressed]}
+            >
+              <Text style={styles.optionText}>按本周导出（CSV）</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={async () => { setExportOpen(false); await handle(exportScheduleCsvForMonth); }}
+              style={({ pressed }) => [styles.option, pressed && styles.pressed]}
+            >
+              <Text style={styles.optionText}>按本月导出（CSV）</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => { setExportOpen(false); alert('自定义日期范围导出将很快提供'); }}
+              style={({ pressed }) => [styles.option, pressed && styles.pressed]}
+            >
+              <Text style={styles.optionText}>自定义日期范围（即将可用）</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setExportOpen(false)}
+              style={({ pressed }) => [styles.optionCancel, pressed && styles.pressed]}
+            >
+              <Text style={styles.optionCancelText}>取消</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -323,5 +348,49 @@ const styles = StyleSheet.create({
   green: { backgroundColor: '#16a34a' },
   blueOutline: { backgroundColor: '#3b82f6' },
   orangeOutline: { backgroundColor: '#fb923c' },
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: 0.85 }
+  ,
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalSheet: {
+    width: '86%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+    color: '#111827',
+  },
+  option: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#1e40af',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  optionText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  optionCancel: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  optionCancelText: {
+    color: '#374151',
+    fontSize: 15,
+    fontWeight: '600',
+  }
 });
