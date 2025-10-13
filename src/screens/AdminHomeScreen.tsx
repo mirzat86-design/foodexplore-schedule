@@ -12,6 +12,9 @@
  *       - 岗位：role | position | role_name
  *       - 员工：employee_name | name
  */
+import React, { useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 import { supabase } from '../lib/supabase';
 
@@ -198,3 +201,127 @@ function endOfMonth(d: Date): Date {
 function localeCompareCN(a: string, b: string) {
   return a.localeCompare(b, 'zh-Hans-CN');
 }
+// ---------------- UI: Admin Home ----------------
+export default function AdminHomeScreen() {
+  // navigation is optional — if navigator not mounted, we won't crash
+  const navigation: any = (() => {
+    try { return useNavigation(); } catch { return null; }
+  })();
+
+  const [busy, setBusy] = useState(false);
+
+  async function handle(action: () => Promise<void>) {
+    try {
+      setBusy(true);
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>管理员</Text>
+      <Text style={styles.subtitle}>请选择要管理的模块 / 导出排班表</Text>
+
+      {/* 导出按钮区 */}
+      <View style={styles.group}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => handle(exportScheduleCsvForWeek)}
+          style={({ pressed }) => [styles.btn, styles.blue, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>{busy ? '导出中…' : '导出本周排班（CSV）'}</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => handle(exportScheduleCsvForMonth)}
+          style={({ pressed }) => [styles.btn, styles.orange, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>{busy ? '导出中…' : '导出本月排班（CSV）'}</Text>
+        </Pressable>
+
+        {/* 占位：自定义日期范围可在后续加入日期选择器，这里先给一个导航/提示 */}
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => {
+            // 以后可以打开一个日期范围选择页；现在先提示
+            alert('自定义日期范围导出即将上线');
+          }}
+          style={({ pressed }) => [styles.btn, styles.green, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>自定义日期范围（即将可用）</Text>
+        </Pressable>
+      </View>
+
+      {/* 保留原有导航入口（若存在导航栈） */}
+      <View style={styles.group}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => navigation?.navigate?.('Schedule')}
+          style={({ pressed }) => [styles.btn, styles.blueOutline, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>排班表编辑</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => navigation?.navigate?.('Announcement')}
+          style={({ pressed }) => [styles.btn, styles.orangeOutline, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>公告编辑</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => navigation?.navigate?.('EmployeePool')}
+          style={({ pressed }) => [styles.btn, styles.blueOutline, pressed && styles.pressed]}
+        >
+          <Text style={styles.btnText}>员工池（增删员工）</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: '#f7f9fc',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#667085',
+    marginBottom: 16,
+  },
+  group: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  btn: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  btnText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  blue: { backgroundColor: '#1e40af' },
+  orange: { backgroundColor: '#ea580c' },
+  green: { backgroundColor: '#16a34a' },
+  blueOutline: { backgroundColor: '#3b82f6' },
+  orangeOutline: { backgroundColor: '#fb923c' },
+  pressed: { opacity: 0.85 },
+});
