@@ -1,164 +1,200 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal } from 'react-native';
-import { StackScreenProps } from '@react-navigation/stack';
-import type { RootStackParamList } from '../../App'; // 路径按你的 App.tsx 所在位置调整
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Export schedule (方案B：行=日期, 列=岗位) 为 CSV。
+ * - 行：日期（YYYY-MM-DD）
+ * - 列：各岗位（同一天同岗位多名员工用 " / " 连接）
+ * - 支持导出：本周 / 本月 / 自定义日期范围
+ *
+ * 依赖：
+ *   - Supabase 表：public.schedule_assignments（字段名尽量做了兼容）
+ *     期望字段（任选其一，做了别名兼容）：
+ *       - 日期：date | work_date | shift_date
+ *       - 岗位：role | position | role_name
+ *       - 员工：employee_name | name
+ */
 
-import { exportScheduleCsvForWeek, exportScheduleCsvForMonth, exportScheduleCsvForRange } from '../../utils/exportSchedule';
+import { supabase } from '../lib/supabase';
 
-type Props = StackScreenProps<RootStackParamList, 'AdminHome'>;
+// ---------- 公共导出方法（供 AdminHomeScreen 调用） ----------
+export async function exportScheduleCsvForWeek(): Promise<void> {
+  const today = new Date();
+  const monday = startOfWeek(today);     // 周一
+  const sunday = endOfWeek(today);       // 周日
+  await exportScheduleCsvForRange(monday, sunday);
+}
 
-const AdminHomeScreen: React.FC<Props> = ({ navigation }) => {
-  const [exportOpen, setExportOpen] = useState(false);
-  const [startDate, setStartDate] = useState(''); // YYYY-MM-DD
-  const [endDate, setEndDate] = useState('');
+export async function exportScheduleCsvForMonth(): Promise<void> {
+  const today = new Date();
+  const first = startOfMonth(today);
+  const last = endOfMonth(today);
+  await exportScheduleCsvForRange(first, last);
+}
 
-  const handleExportWeek = async () => {
-    try {
-      await exportScheduleCsvForWeek();
-      setExportOpen(false);
-    } catch (e: any) {
-      console.error('Export week failed', e?.message || e);
-    }
+export async function exportScheduleCsvForRange(start: Date, end: Date): Promise<void> {
+  // 拉取数据
+  const assignments = await fetchAssignments(dateToISO(start), dateToISO(end));
+
+  // 透视成：行=日期，列=岗位
+  const { rows, allRoles } = pivotByDateAndRole(assignments);
+
+  // 生成 CSV
+  const csv = buildCsv(rows, allRoles);
+
+  // 触发下载
+  const filename = `排班表_岗位x日期_${dateToISO(start)}_to_${dateToISO(end)}.csv`;
+  triggerDownload(csv, filename);
+}
+
+// ---------- 数据获取 ----------
+type RawAssignment = Record<string, any>;
+
+function normalizeRecord(r: RawAssignment) {
+  const dateStr: string =
+    r.date || r.work_date || r.shift_date || r.workDate || r.shiftDate || r.workday || r.work_day;
+
+  const role: string =
+    r.role || r.position || r.role_name || r.position_name || r.shift_role;
+
+  const empName: string =
+    r.employee_name || r.name || r.employee || r.staff_name;
+
+  return {
+    date: (dateStr ? dateStr.slice(0, 10) : ''), // 统一 YYYY-MM-DD
+    role: (role ?? '').toString(),
+    employee: (empName ?? '').toString(),
   };
+}
 
-  const handleExportMonth = async () => {
-    try {
-      await exportScheduleCsvForMonth();
-      setExportOpen(false);
-    } catch (e: any) {
-      console.error('Export month failed', e?.message || e);
+async function fetchAssignments(startISO: string, endISO: string): Promise<Array<{ date: string; role: string; employee: string }>> {
+  // 最宽松的 select，尽量拿全字段；排序按日期
+  const { data, error } = await supabase
+    .from('schedule_assignments')
+    .select('*')
+    .gte('date', startISO) // 如果你的真实字段是 work_date/shift_date，下面 normalizeRecord 会兜底
+    .lte('date', endISO)
+    .order('date', { ascending: true });
+
+  if (error) {
+    console.error('[exportSchedule] supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(normalizeRecord).filter(r => r.date && r.role);
+}
+
+// ---------- 透视逻辑（日期 x 岗位） ----------
+function pivotByDateAndRole(assignments: Array<{ date: string; role: string; employee: string }>) {
+  // 收集所有岗位（列）
+  const roleSet = new Set<string>();
+  // 日期 -> 岗位 -> 员工数组
+  const dateMap = new Map<string, Map<string, string[]>>();
+
+  for (const a of assignments) {
+    const d = a.date;
+    const role = a.role?.trim();
+    if (!d || !role) continue;
+
+    roleSet.add(role);
+
+    if (!dateMap.has(d)) dateMap.set(d, new Map());
+    const byRole = dateMap.get(d)!;
+    if (!byRole.has(role)) byRole.set(role, []);
+
+    const emp = (a.employee ?? '').trim();
+    if (emp) byRole.get(role)!.push(emp);
+  }
+
+  const allRoles = Array.from(roleSet).sort(localeCompareCN);
+
+  // 生成每一行：{ 日期, 岗位1, 岗位2, ... }
+  const rows: Array<Record<string, string>> = [];
+  const allDates = Array.from(dateMap.keys()).sort();
+
+  for (const d of allDates) {
+    const obj: Record<string, string> = { 日期: d };
+    const byRole = dateMap.get(d)!;
+    for (const role of allRoles) {
+      const emps = byRole.get(role) ?? [];
+      obj[role] = emps.join(' / ');
     }
-  };
+    rows.push(obj);
+  }
 
-  const handleExportRange = async () => {
-    try {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-        alert('请输入正确的日期格式：YYYY-MM-DD');
-        return;
-      }
-      const s = new Date(startDate + 'T00:00:00');
-      const e = new Date(endDate + 'T00:00:00');
-      if (s > e) {
-        alert('开始日期不能晚于结束日期');
-        return;
-      }
-      await exportScheduleCsvForRange(s, e);
-      setExportOpen(false);
-    } catch (e: any) {
-      console.error('Export range failed', e?.message || e);
-    }
-  };
+  return { rows, allRoles };
+}
 
-  return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>管理员</Text>
-      <Text style={styles.sub}>请选择要管理的模块</Text>
+// ---------- CSV ----------
+function buildCsv(rows: Array<Record<string, string>>, roles: string[]): string {
+  const headers = ['日期', ...roles];
+  const lines: string[] = [];
 
-      <TouchableOpacity
-        style={[styles.card, styles.primary]}
-        onPress={() => navigation.navigate('Schedule')}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.cardText}>排班表编辑</Text>
-      </TouchableOpacity>
+  lines.push(toCsvLine(headers));
+  for (const row of rows) {
+    const arr = headers.map(h => row[h] ?? '');
+    lines.push(toCsvLine(arr));
+  }
+  return lines.join('\r\n');
+}
 
-      <TouchableOpacity
-        style={[styles.card, styles.orange]}
-        onPress={() => navigation.navigate('Announcement')}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.cardText}>公告编辑</Text>
-      </TouchableOpacity>
+function toCsvLine(arr: string[]): string {
+  return arr.map(escapeCsvCell).join(',');
+}
 
-      <TouchableOpacity
-        style={[styles.card, styles.blue]}
-        onPress={() => navigation.navigate('EmployeePool')}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.cardText}>员工池（增删员工）</Text>
-      </TouchableOpacity>
+function escapeCsvCell(v: string): string {
+  if (v == null) return '';
+  const str = String(v);
+  // 若包含逗号/引号/换行，需用双引号包裹，并转义引号为两个引号
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
-      <TouchableOpacity
-        style={[styles.card, styles.green]}
-        onPress={() => setExportOpen(true)}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.cardText}>导出排班表</Text>
-      </TouchableOpacity>
+function triggerDownload(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+}
 
-      <Modal transparent visible={exportOpen} animationType="fade" onRequestClose={() => setExportOpen(false)}>
-        <View style={styles.modalMask}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>选择导出范围</Text>
+// ---------- 日期工具 ----------
+function dateToISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-            <TouchableOpacity style={[styles.exportBtn, styles.weekBtn]} onPress={handleExportWeek}>
-              <Text style={styles.exportBtnText}>导出本周（岗位×日期）CSV</Text>
-            </TouchableOpacity>
+function startOfWeek(d: Date): Date {
+  const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = (tmp.getDay() + 6) % 7; // 周一=0
+  tmp.setDate(tmp.getDate() - day);
+  return tmp;
+}
 
-            <TouchableOpacity style={[styles.exportBtn, styles.monthBtn]} onPress={handleExportMonth}>
-              <Text style={styles.exportBtnText}>导出本月 CSV</Text>
-            </TouchableOpacity>
+function endOfWeek(d: Date): Date {
+  const s = startOfWeek(d);
+  const e = new Date(s);
+  e.setDate(e.getDate() + 6);
+  return e;
+}
 
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.rangeLabel}>自定义日期范围</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="开始：YYYY-MM-DD"
-                  value={startDate}
-                  onChangeText={setStartDate}
-                  inputMode="numeric"
-                  placeholderTextColor="#999"
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="结束：YYYY-MM-DD"
-                  value={endDate}
-                  onChangeText={setEndDate}
-                  inputMode="numeric"
-                  placeholderTextColor="#999"
-                />
-              </View>
-              <TouchableOpacity style={[styles.exportBtn, styles.rangeBtn]} onPress={handleExportRange}>
-                <Text style={styles.exportBtnText}>导出该范围 CSV</Text>
-              </TouchableOpacity>
-            </View>
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
 
-            <TouchableOpacity style={styles.cancel} onPress={() => setExportOpen(false)}>
-              <Text style={styles.cancelText}>取消</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-};
+function endOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+}
 
-const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: 20, paddingTop: 56, backgroundColor: '#fff' },
-  title: { fontSize: 28, fontWeight: '800', color: '#111' },
-  sub: { marginTop: 6, color: '#666' },
-  card: {
-    height: 64, borderRadius: 12, marginTop: 16,
-    alignItems: 'center', justifyContent: 'center'
-  },
-  primary: { backgroundColor: '#173B88' },
-  orange: { backgroundColor: '#FF6A00' },
-  blue: { backgroundColor: '#2563EB' },
-  cardText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  green: { backgroundColor: '#27AE60' },
-  modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
-  modalBox: { width: '90%', maxWidth: 480, backgroundColor: '#fff', borderRadius: 12, padding: 16 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
-  exportBtn: { height: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
-  weekBtn: { backgroundColor: '#34D399' },
-  monthBtn: { backgroundColor: '#10B981' },
-  rangeBtn: { backgroundColor: '#059669' },
-  exportBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  rangeLabel: { color: '#333', fontSize: 14, marginTop: 4 },
-  input: { flex: 1, height: 44, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, fontSize: 16 },
-  cancel: { marginTop: 10, alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16 },
-  cancelText: { color: '#6b7280', fontSize: 14 },
-});
-
-export default AdminHomeScreen;
+// 中文优先的排序（岗位名更自然）
+function localeCompareCN(a: string, b: string) {
+  return a.localeCompare(b, 'zh-Hans-CN');
+}
