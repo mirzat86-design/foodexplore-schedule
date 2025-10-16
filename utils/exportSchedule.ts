@@ -193,15 +193,31 @@ export function buildCsv(
  */
 export function triggerDownload(filename: string, content: string, mime = 'text/csv;charset=utf-8') {
   if (typeof window === 'undefined') return;
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+
+  try {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+
+    // 尝试触发下载
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log(`[Download] CSV 下载已触发：${filename}`);
+  } catch (err) {
+    console.warn('[Download] 直接下载被拦截，尝试打开新窗口', err);
+    try {
+      const dataUrl = `data:${mime},${encodeURIComponent(content)}`;
+      window.open(dataUrl, '_blank');
+    } catch (openErr) {
+      console.error('[Download] 打开新窗口失败', openErr);
+      alert('下载被浏览器拦截，请长按或手动保存页面内容。');
+    }
+  }
 }
 
 /**
