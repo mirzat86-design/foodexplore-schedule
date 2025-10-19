@@ -24,12 +24,17 @@ module.exports = async (req, res) => {
   if (!isAdmin) return res.status(401).json({ error: 'Unauthorized' });
 
   const body = await readJson(req);
-  const id = body && body.id;
-  if (!id) return res.status(400).json({ error: 'id required' });
+  const id = body && String(body.id || '').trim();
+  const enabled = body && body.enabled;
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  if (!isUuid || typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'invalid payload: { id: UUID, enabled: boolean } required' });
+  }
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
-    const { error } = await supabase.from('employees').delete().eq('id', id);
+    const { error } = await supabase.from('employees').update({ enabled }).eq('id', id);
     if (error) return res.status(500).json({ error: error.message });
 
     return res.json({ ok: true });
